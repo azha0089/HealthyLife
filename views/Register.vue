@@ -138,20 +138,20 @@ const rules = {
       trigger: ['blur', 'change'] 
     }
   ],
-  password: [
-    { required: true, message: 'Please enter password', trigger: 'blur' },
-    { 
-      min: 6, 
-      max: 20, 
-      message: 'Password length should be 6-20 characters', 
-      trigger: ['blur', 'change'] 
-    },
-    {
-      pattern: /^(?=.*[a-zA-Z])(?=.*\d)/,
-      message: 'Password must contain letters and numbers',
-      trigger: ['blur', 'change']
-    }
-  ],
+ password: [
+  { required: true, message: 'Please enter password', trigger: 'blur' },
+  { 
+    min: 6, 
+    max: 15, 
+    message: 'Password length should be 6-15 characters', 
+    trigger: ['blur', 'change'] 
+  },
+  {
+    pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).+$/,
+    message: 'Password must include uppercase, lowercase, and special character',
+    trigger: ['blur', 'change']
+  }
+],
   confirmPassword: [
     { required: true, message: 'Please confirm password', trigger: 'blur' },
     { validator: validateConfirmPassword, trigger: ['blur', 'change'] }
