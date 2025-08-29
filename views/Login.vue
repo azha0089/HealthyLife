@@ -38,7 +38,7 @@
           <el-button
             type="primary"
             size="large"
-            style="width: 100%"
+            class="full-width-btn"
             :loading="loading"
             @click="handleLogin"
           >
@@ -54,16 +54,7 @@
         </p>
       </div>
 
-      <!-- Test account information -->
-      <div class="test-accounts">
-        <h3>Test Accounts</h3>
-        <div class="account-item">
-          <strong>Admin:</strong> admin@google.com / 123456
-        </div>
-        <div class="account-item">
-          <strong>User:</strong> user@google.com / 123456
-        </div>
-      </div>
+      <TestAccounts />
     </div>
   </div>
 </template>
@@ -74,63 +65,69 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth.js'
 
+/**
+ * TestAccounts is separated into a small component for clarity.
+ */
+const TestAccounts = {
+  template: `
+    <div class="test-accounts">
+      <h3>Test Accounts</h3>
+      <div class="account-item">
+        <strong>Admin:</strong> admin@google.com / 123456
+      </div>
+      <div class="account-item">
+        <strong>User:</strong> user@google.com / 123456
+      </div>
+    </div>
+  `
+}
+
 const router = useRouter()
 const authStore = useAuthStore()
 const loginFormRef = ref()
 const loading = ref(false)
 
-// Form data
+// form data
 const loginForm = reactive({
   email: '',
   password: ''
 })
 
-// Form validation rules
-const rules = {
-  email: [
-    { required: true, message: 'Please enter email address', trigger: 'blur' },
-    { 
-      type: 'email', 
-      message: 'Please enter a valid email format', 
-      trigger: ['blur', 'change'] 
-    }
-  ],
-  password: [
-    { required: true, message: 'Please enter password', trigger: 'blur' },
-    { 
-      min: 6, 
-      max: 20, 
-      message: 'Password length should be 6-20 characters', 
-      trigger: ['blur', 'change'] 
-    }
-  ]
-}
+// validation rules
+const emailRules = [
+  { required: true, message: 'Please enter email address', trigger: 'blur' },
+  { type: 'email', message: 'Please enter a valid email format', trigger: ['blur', 'change'] }
+]
 
-// Handle login
+const passwordRules = [
+  { required: true, message: 'Please enter password', trigger: 'blur' },
+  { min: 6, max: 20, message: 'Password length should be 6-20 characters', trigger: ['blur', 'change'] }
+]
+
+const rules = { email: emailRules, password: passwordRules }
+
+// helper for error messages
+const showError = (msg) => ElMessage.error(msg || 'Login failed, please try again later')
+
+// handle login
 const handleLogin = async () => {
   if (!loginFormRef.value) return
-  
+
   try {
     const valid = await loginFormRef.value.validate()
     if (!valid) return
 
     loading.value = true
     const result = await authStore.login(loginForm.email, loginForm.password)
-    
+
     if (result.success) {
       ElMessage.success('Login successful')
-      
-      // Redirect to appropriate page based on user role
-      if (result.user.role === 'admin') {
-        router.push('/admin')
-      } else {
-        router.push('/')
-      }
+      router.push(result.user.role === 'admin' ? '/admin' : '/')
     } else {
-      ElMessage.error(result.message)
+      showError(result.message)
     }
   } catch (error) {
-    ElMessage.error('Login failed, please try again later')
+    showError()
   } finally {
     loading.value = false
   }
@@ -178,6 +175,10 @@ const handleLogin = async () => {
 
 .el-form-item {
   margin-bottom: 20px;
+}
+
+.full-width-btn {
+  width: 100%;
 }
 
 .login-footer {
