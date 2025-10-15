@@ -42,10 +42,20 @@
         </div>
 
         <div class="article-actions">
-          <el-button type="primary" @click="exportToPDF">
-            <el-icon><Download /></el-icon>
-            Export PDF
-          </el-button>
+          <el-button :type="isSpeaking ? 'warning' : 'success'" @click="toggleReadAloud" aria-label="Read Aloud">{{ isSpeaking ? 'Stop' : 'Read Aloud' }}</el-button>
+          <el-dropdown @command="handleExportCommand">
+            <el-button type="primary" plain>
+              <el-icon style="margin-right:6px;"><Download /></el-icon>
+              Export
+              <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="download">Download PDF</el-dropdown-item>
+                <el-dropdown-item divided command="email">Send to Email</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-button @click="goBack">
             <el-icon><ArrowLeft /></el-icon>
             Back
@@ -94,7 +104,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowRight,
@@ -107,10 +117,16 @@ import {
   Delete
 } from '@element-plus/icons-vue'
 import { useMacroArticles } from '../composables/useMacroArticles.js'
+import { useAuthStore } from '../stores/auth.js'
 import { ElMessage } from 'element-plus'
+import { sendEmail, buildAuthEmailTemplate } from '../services/emailService.js'
+import { storage } from '../firebase.js'
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
+const EMAIL_WEBAPP_URL = import.meta?.env?.VITE_GAS_EMAIL_WEBAPP_URL || 'https://script.google.com/macros/s/AKfycbztBRp0dJbw9DsFNoCL-hkeuypwsBPeVP1K35DYK8ttBTTsCSTHw4Vwa6I1sGw1cvS4Ow/exec'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 
 // Use Firebase composable for macro articles
 const {
@@ -183,20 +199,10 @@ const getBreadcrumbText = () => {
   return 'Macronutrients'
 }
 
-const exportToPDF = () => {
-  ElMessage({
-    message: `Exporting "${article.value.title}" to PDF...`,
-    type: 'info',
-    duration: 2000
-  })
-
-  setTimeout(() => {
-    ElMessage({
-      message: 'PDF export completed successfully!',
-      type: 'success',
-      duration: 3000
-    })
-  }, 2000)
+// Export handlers (PDF to device or Email)
+function handleExportCommand(cmd) {
+  if (cmd === 'download') return exportToDevicePDF('a4')
+  if (cmd === 'email') return exportToEmailPDF('a4')
 }
 
 const goBack = () => {
@@ -206,6 +212,153 @@ const goBack = () => {
 const navigateToArticle = (relatedArticle) => {
   router.push(`/learn/macro/${relatedArticle.id}`)
 }
+
+// Read Aloud (Web Speech API)
+const isSpeaking = ref(false)
+let utterance = null
+
+function stripHtml(html) {
+  const raw = html || ''
+  try {
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      const d = document.createElement('div')
+      d.innerHTML = raw
+      const txt = d.textContent || d.innerText || ''
+      return txt.replace(/\s+/g, ' ').trim()
+    }
+  } catch (_) {}
+  // Fallback (no DOM available): strip tags via regex
+  return raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function buildReadableText() {
+  const parts = []
+  if (article.value?.title) parts.push(article.value.title)
+  if (article.value?.excerpt) parts.push(article.value.excerpt)
+  const body = stripHtml(getArticleContent())
+  if (body) parts.push(body)
+  return parts.join('. ')
+}
+
+function startReading() {
+  try {
+    if (!('speechSynthesis' in window)) return
+    stopReading()
+    utterance = new SpeechSynthesisUtterance(buildReadableText())
+    utterance.onend = () => { isSpeaking.value = false }
+    window.speechSynthesis.speak(utterance)
+    isSpeaking.value = true
+  } catch (_) {}
+}
+
+function stopReading() {
+  try {
+    window.speechSynthesis?.cancel()
+  } catch (_) {}
+  isSpeaking.value = false
+}
+
+function toggleReadAloud() {
+  if (isSpeaking.value) stopReading(); else startReading()
+}
+
+onBeforeUnmount(() => stopReading())
+
+async function ensureJsLib(src, globalKey) {
+  if (globalKey && window[globalKey]) return window[globalKey]
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = src
+    s.onload = resolve
+    s.onerror = reject
+    document.head.appendChild(s)
+  })
+  return globalKey ? window[globalKey] : null
+}
+
+async function generatePdfFromElement(selector, { mode = 'single-native' } = {}) {
+  const el = document.querySelector(selector)
+  if (!el) throw new Error('Content not found')
+  await ensureJsLib('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js', 'html2canvas')
+  await ensureJsLib('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', 'jspdf')
+  const canvas = await window.html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
+  const { jsPDF } = window.jspdf
+
+  if (mode === 'single-native') {
+    // Create a PDF page that matches the rendered canvas size to avoid any squash
+    const pxToPt = (px) => px * 72 / 96 // assuming 96dpi
+    const wPt = pxToPt(canvas.width)
+    const hPt = pxToPt(canvas.height)
+    const pdf = new jsPDF('p', 'pt', [wPt, hPt])
+    const imgDataPNG = canvas.toDataURL('image/png')
+    pdf.addImage(imgDataPNG, 'PNG', 0, 0, wPt, hPt)
+    return pdf
+  } else {
+    // A4 multipage fallback (kept as alternative)
+    const pdf = new jsPDF('p', 'mm', 'a4')
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+    const margin = 10
+    const imgWidth = pageWidth - margin * 2
+    const imgHeight = canvas.height * imgWidth / canvas.width
+    const imgDataJPEG = canvas.toDataURL('image/jpeg', 0.85) // compress for email size
+    const pageContentHeight = pageHeight - margin * 2
+    const totalPages = Math.ceil(imgHeight / pageContentHeight)
+    for (let i = 0; i < totalPages; i++) {
+      if (i > 0) pdf.addPage()
+      const y = margin - i * pageContentHeight
+      pdf.addImage(imgDataJPEG, 'JPEG', margin, y, imgWidth, imgHeight)
+    }
+    return pdf
+  }
+}
+
+async function exportToDevicePDF(mode = 'a4') {
+  try {
+    const pdf = await generatePdfFromElement('.article-content', { mode })
+    const name = (article.value?.title || 'article').replace(/[^a-z0-9\-_]+/gi,'_') + '.pdf'
+    pdf.save(name)
+  } catch (e) {
+    ElMessage.error('Failed to generate PDF')
+  }
+}
+
+async function exportToEmailPDF(mode = 'a4') {
+  try {
+    const pdf = await generatePdfFromElement('.article-content', { mode })
+    const arrayBuf = pdf.output('arraybuffer')
+    const bytes = new Uint8Array(arrayBuf)
+    // 1) Upload to Firebase Storage to avoid large email attachments
+    const safeName = (article.value?.title || 'article').replace(/[^a-z0-9\-_]+/gi,'_') + '_' + Date.now() + '.pdf'
+    const fileRef = storageRef(storage, `exports/${safeName}`)
+    await uploadBytes(fileRef, bytes, { contentType: 'application/pdf' })
+    const downloadURL = await getDownloadURL(fileRef)
+    const html = buildAuthEmailTemplate({
+      title: 'Article Export',
+      greeting: 'Your requested export link is below.',
+      contentLines: [article.value?.title || '', `Download: ${downloadURL}`]
+    })
+    let recipient = authStore?.user?.email || ''
+    if (!recipient) recipient = prompt('Enter email address to send to:') || ''
+    if (!recipient || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipient)) {
+      ElMessage.error('Please provide a valid recipient email')
+      return
+    }
+    const resp = await sendEmail({
+      to: recipient,
+      subject: `Export - ${(article.value?.title || 'Article')}`,
+      html,
+      // no attachment; send link only
+      webAppUrl: EMAIL_WEBAPP_URL
+    })
+    if (!resp?.success) throw new Error(resp?.message || 'Email not configured')
+    ElMessage.success('Export email sent (best-effort)')
+  } catch (e) {
+    ElMessage.error('Failed to send email')
+  }
+}
+
+// (Removed legacy CSV export handlers; using high-quality PDF handlers above)
 
 // Lifecycle
 onMounted(() => {

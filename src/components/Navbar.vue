@@ -60,6 +60,20 @@
         </el-menu>
 
         <div class="navbar-right-menu">
+          <!-- Font size controls -->
+          <el-dropdown @command="setFontPreset">
+            <span class="el-dropdown-link font-dropdown" aria-label="Font size controls">
+              {{ fontPresetLabel }}
+              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="small">Small (A-)</el-dropdown-item>
+                <el-dropdown-item command="medium">Medium (A)</el-dropdown-item>
+                <el-dropdown-item command="large">Large (A+)</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <!-- Not logged in state -->
           <template v-if="!authStore.isAuthenticated">
             <el-button type="text" @click="$router.push('/login')">
@@ -136,6 +150,21 @@
               <el-icon class="brand-icon"><Apple /></el-icon>
               <span class="brand-text">HealthyLife</span>
             </router-link>
+            <div style="margin-top:8px;">
+              <el-dropdown @command="setFontPreset">
+                <span class="el-dropdown-link font-dropdown" aria-label="Font size controls">
+                  {{ fontPresetLabel }}
+                  <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                </span>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="small">Small (A-)</el-dropdown-item>
+                    <el-dropdown-item command="medium">Medium (A)</el-dropdown-item>
+                    <el-dropdown-item command="large">Large (A+)</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </div>
 
           <!-- Mobile menu -->
@@ -217,7 +246,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -293,6 +322,39 @@ const closeMobileMenu = () => {
 watch(() => route.path, () => {
   mobileMenuVisible.value = false
 })
+
+// Font size controls (Accessibility) - small / medium / large presets
+const fontPreset = ref('medium') // 'small' | 'medium' | 'large'
+const presetToRootPercent = (preset) => {
+  switch (preset) {
+    case 'small': return 90 // 90%
+    case 'large': return 112.5 // 112.5% ~ 1.125rem
+    default: return 100
+  }
+}
+const applyFontPreset = (preset) => {
+  try {
+    const percent = presetToRootPercent(preset)
+    // Set root html font-size so rem/em scale globally
+    document.documentElement.style.fontSize = `${percent}%`
+    // Clear body override to avoid double scaling
+    document.body.style.fontSize = ''
+  } catch (_) {}
+}
+const setFontPreset = (preset) => {
+  fontPreset.value = preset
+  localStorage.setItem('fontPreset', preset)
+  applyFontPreset(preset)
+}
+onMounted(() => {
+  const saved = localStorage.getItem('fontPreset')
+  if (saved === 'small' || saved === 'medium' || saved === 'large') {
+    fontPreset.value = saved
+  }
+  applyFontPreset(fontPreset.value)
+})
+
+const fontPresetLabel = computed(() => fontPreset.value === 'small' ? 'A-' : (fontPreset.value === 'large' ? 'A+' : 'A'))
 </script>
 
 <style scoped>
@@ -337,6 +399,9 @@ watch(() => route.path, () => {
   margin-left: 30px;
   padding-right: 30px;
 }
+
+.font-controls { display:flex; gap:4px; align-items:center; }
+.font-btn { font-weight: 700; }
 
 .user-dropdown {
   display: flex;

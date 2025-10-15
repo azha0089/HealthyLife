@@ -19,10 +19,22 @@
     <!-- Recipe Content -->
     <div v-else class="recipe-content">
       <!-- Back Navigation -->
-      <div class="back-nav">
-        <el-button @click="goBack" icon="ArrowLeft" type="text">
-          Back to last  page
-        </el-button>
+      <div class="back-nav" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <el-button @click="goBack" icon="ArrowLeft" type="text">Back to last  page</el-button>
+        <div>
+          <el-button :type="isSpeaking ? 'warning' : 'success'" @click="toggleReadAloud" aria-label="Read Aloud">{{ isSpeaking ? 'Stop' : 'Read Aloud' }}</el-button>
+          <el-dropdown @command="handleExportCommand">
+            <span class="el-dropdown-link">
+              <el-icon><Download /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="email">Send to Email</el-dropdown-item>
+                <el-dropdown-item command="download">Download (CSV)</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </div>
 
       <!-- Recipe Header -->
@@ -256,7 +268,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { getRecipeById, getRelatedRecipes } from '../services/recipeService.js'
@@ -276,6 +288,7 @@ import {
   List
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { sendEmail, buildAuthEmailTemplate } from '../services/emailService.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -544,6 +557,100 @@ const formatTag = (tag) => {
   return tag.split('-').map(word =>
     word.charAt(0).toUpperCase() + word.slice(1)
   ).join(' ')
+}
+
+// Read Aloud (Web Speech API)
+const isSpeaking = ref(false)
+let utterance = null
+
+function stripHtml(html) {
+  const d = document.createElement('div')
+  d.innerHTML = html || ''
+  return d.innerText.replace(/\s+/g, ' ').trim()
+}
+
+function buildReadableText() {
+  const parts = []
+  if (recipe.value?.title) parts.push(recipe.value.title)
+  const left = document.querySelector('.ingredients-section')?.innerText || ''
+  const right = document.querySelector('.instructions-section')?.innerText || ''
+  const body = [left, right].join('. ').replace(/\s+/g, ' ').trim()
+  if (body) parts.push(body)
+  return parts.join('. ')
+}
+
+function startReading() {
+  try {
+    if (!('speechSynthesis' in window)) return
+    stopReading()
+    utterance = new SpeechSynthesisUtterance(buildReadableText())
+    utterance.onend = () => { isSpeaking.value = false }
+    window.speechSynthesis.speak(utterance)
+    isSpeaking.value = true
+  } catch (_) {}
+}
+
+function stopReading() {
+  try { window.speechSynthesis?.cancel() } catch (_) {}
+  isSpeaking.value = false
+}
+
+function toggleReadAloud() {
+  if (isSpeaking.value) stopReading(); else startReading()
+}
+
+onBeforeUnmount(() => stopReading())
+
+// Export (CSV or Email)
+function handleExportCommand(cmd) {
+  if (cmd === 'email') return exportToEmail()
+  if (cmd === 'download') return exportToDevice()
+}
+
+function asCsv() {
+  if (!recipe.value) return ''
+  const rows = [
+    ['Title', 'Total Time', 'Calories', 'Servings'],
+    [recipe.value.title, recipe.value.totalTime, recipe.value.calories, recipe.value.servings]
+  ]
+  return rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n')
+}
+
+function downloadBlob(filename, content, type='text/csv;charset=utf-8') {
+  const blob = new Blob([content], { type })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function exportToDevice() {
+  const csv = asCsv()
+  downloadBlob(`${(recipe.value?.title || 'recipe').replace(/[^a-z0-9\-_]+/gi,'_')}.csv`, csv)
+}
+
+async function exportToEmail() {
+  try {
+    const to = ''
+    const html = buildAuthEmailTemplate({
+      title: 'Recipe Export',
+      greeting: 'Your requested export is attached below.',
+      contentLines: [recipe.value?.title || '']
+    })
+    const csv = asCsv()
+    const base64 = btoa(unescape(encodeURIComponent(csv)))
+    await sendEmail({
+      to: to || prompt('Enter email address to send to:'),
+      subject: `Export - ${(recipe.value?.title || 'Recipe')}`,
+      html,
+      attachments: [{ filename: 'recipe.csv', mimeType: 'text/csv', content: base64 }]
+    })
+    ElMessage.success('Export email sent (best-effort)')
+  } catch (e) {
+    ElMessage.error('Failed to send email')
+  }
 }
 
 // Watch route changes

@@ -13,6 +13,16 @@
     </div>
 
     <div class="profile-content">
+      <div class="quick-links">
+        <el-button type="primary" plain @click="$router.push('/profile/my-events')">
+          <el-icon><Calendar /></el-icon>
+          My Events
+        </el-button>
+        <el-button @click="$router.push('/events')">
+          <el-icon><Calendar /></el-icon>
+          Browse Events
+        </el-button>
+      </div>
       <!-- Favorites Section -->
       <div class="favorites-section">
         <div class="section-header">
@@ -276,6 +286,8 @@ onMounted(() => {
   flex-direction: column;
   gap: 30px;
 }
+
+.quick-links { display:flex; gap:10px; }
 
 .favorites-section {
   background: white;

@@ -49,10 +49,20 @@
         </div>
         
         <div class="article-actions">
-          <el-button type="primary" @click="exportToPDF">
-            <el-icon><Download /></el-icon>
-            Export PDF
-          </el-button>
+          <el-button :type="isSpeaking ? 'warning' : 'success'" @click="toggleReadAloud" aria-label="Read Aloud">{{ isSpeaking ? 'Stop' : 'Read Aloud' }}</el-button>
+          <el-dropdown @command="handleExportCommand">
+            <el-button type="primary" plain>
+              <el-icon style="margin-right:6px;"><Download /></el-icon>
+              Export
+              <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="download">Download PDF</el-dropdown-item>
+                <el-dropdown-item divided command="email">Send to Email</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-button @click="goBack">
             <el-icon><ArrowLeft /></el-icon>
             Back to Vitamins
@@ -175,7 +185,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { 
@@ -193,6 +203,9 @@ import {
   getVitaminArticleById, 
   getRelatedVitaminArticles 
 } from '../services/vitaminService.js'
+import { sendEmail, buildAuthEmailTemplate } from '../services/emailService.js'
+import { storage } from '../firebase.js'
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 
 const route = useRoute()
 const router = useRouter()
@@ -353,6 +366,134 @@ const goBack = () => {
 
 const navigateToArticle = (relatedArticle) => {
   router.push(`/learn/vitamins/${relatedArticle.id}`)
+}
+
+// Read Aloud (Web Speech API)
+const isSpeaking = ref(false)
+let utterance = null
+
+function stripHtml(html) {
+  const d = document.createElement('div')
+  d.innerHTML = html || ''
+  return d.innerText.replace(/\s+/g, ' ').trim()
+}
+
+function buildReadableText() {
+  const parts = []
+  if (article.value?.title) parts.push(article.value.title)
+  if (article.value?.excerpt) parts.push(article.value.excerpt)
+  const body = stripHtml(getArticleContent())
+  if (body) parts.push(body)
+  return parts.join('. ')
+}
+
+function startReading() {
+  try {
+    if (!('speechSynthesis' in window)) return
+    stopReading()
+    utterance = new SpeechSynthesisUtterance(buildReadableText())
+    utterance.onend = () => { isSpeaking.value = false }
+    window.speechSynthesis.speak(utterance)
+    isSpeaking.value = true
+  } catch (_) {}
+}
+
+function stopReading() {
+  try { window.speechSynthesis?.cancel() } catch (_) {}
+  isSpeaking.value = false
+}
+
+function toggleReadAloud() {
+  if (isSpeaking.value) stopReading(); else startReading()
+}
+
+onBeforeUnmount(() => stopReading())
+
+// Export handlers
+function handleExportCommand(cmd) {
+  if (cmd === 'download') return exportToDevicePDF('a4')
+  if (cmd === 'email') return exportToEmailPDF('a4')
+}
+
+async function ensureJsLib(src, globalKey) {
+  if (globalKey && window[globalKey]) return window[globalKey]
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = src
+    s.onload = resolve
+    s.onerror = reject
+    document.head.appendChild(s)
+  })
+  return globalKey ? window[globalKey] : null
+}
+
+async function generatePdfFromElement(selector, { mode = 'a4' } = {}) {
+  const el = document.querySelector(selector)
+  if (!el) throw new Error('Content not found')
+  await ensureJsLib('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js', 'html2canvas')
+  await ensureJsLib('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', 'jspdf')
+  const canvas = await window.html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
+  const imgData = canvas.toDataURL('image/png')
+  const { jsPDF } = window.jspdf
+  if (mode === 'single-native') {
+    const pxToPt = (px) => px * 72 / 96
+    const wPt = pxToPt(canvas.width)
+    const hPt = pxToPt(canvas.height)
+    const pdf = new jsPDF('p', 'pt', [wPt, hPt])
+    pdf.addImage(imgData, 'PNG', 0, 0, wPt, hPt)
+    return pdf
+  } else {
+    const pdf = new jsPDF('p', 'mm', 'a4')
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+    const margin = 10
+    const imgWidth = pageWidth - margin * 2
+    const imgHeight = canvas.height * imgWidth / canvas.width
+    const pageContentHeight = pageHeight - margin * 2
+    const totalPages = Math.ceil(imgHeight / pageContentHeight)
+    for (let i = 0; i < totalPages; i++) {
+      if (i > 0) pdf.addPage()
+      const y = margin - i * pageContentHeight
+      pdf.addImage(imgData, 'PNG', margin, y, imgWidth, imgHeight)
+    }
+    return pdf
+  }
+}
+
+async function exportToDevicePDF(mode = 'a4') {
+  try {
+    const pdf = await generatePdfFromElement('.article-content', { mode })
+    const name = (article.value?.title || 'vitamin').replace(/[^a-z0-9\-_]+/gi,'_') + '.pdf'
+    pdf.save(name)
+  } catch (e) {
+    ElMessage.error('Failed to generate PDF')
+  }
+}
+
+async function exportToEmailPDF(mode = 'a4') {
+  try {
+    const pdf = await generatePdfFromElement('.article-content', { mode })
+    const arrayBuf = pdf.output('arraybuffer')
+    const bytes = new Uint8Array(arrayBuf)
+    const safeName = (article.value?.title || 'vitamin').replace(/[^a-z0-9\-_]+/gi,'_') + '_' + Date.now() + '.pdf'
+    const fileRef = storageRef(storage, `exports/${safeName}`)
+    await uploadBytes(fileRef, bytes, { contentType: 'application/pdf' })
+    const downloadURL = await getDownloadURL(fileRef)
+    const html = buildAuthEmailTemplate({
+      title: 'Vitamin Article Export',
+      greeting: 'Your requested export link is below.',
+      contentLines: [article.value?.title || '', `Download: ${downloadURL}`]
+    })
+    const to = prompt('Enter email address to send to:')
+    await sendEmail({
+      to,
+      subject: `Export - ${(article.value?.title || 'Vitamin Article')}`,
+      html
+    })
+    ElMessage.success('Export email sent (best-effort)')
+  } catch (e) {
+    ElMessage.error('Failed to send email')
+  }
 }
 
 // Lifecycle
