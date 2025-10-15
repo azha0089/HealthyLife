@@ -7,14 +7,7 @@
           {{ article.readTime }}
         </span>
       </div>
-      <el-button 
-        type="text" 
-        class="export-btn"
-        @click.stop="exportToPDF"
-        title="Export to PDF"
-      >
-        <el-icon><Download /></el-icon>
-      </el-button>
+      <!-- removed per requirement: export icon on card -->
     </div>
     
     <div class="article-content">
@@ -46,7 +39,7 @@
 </template>
 
 <script setup>
-import { Clock, Download, User } from '@element-plus/icons-vue'
+import { Clock, User } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 defineEmits(['click'])
@@ -68,25 +61,7 @@ const props = defineProps({
   }
 })
 
-// Export to PDF functionality
-const exportToPDF = () => {
-  // Placeholder for PDF export functionality
-  // In a real app, you would integrate with a PDF library like jsPDF or Puppeteer
-  ElMessage({
-    message: `Exporting "${props.article.title}" to PDF...`,
-    type: 'info',
-    duration: 2000
-  })
-  
-  // Simulate PDF generation
-  setTimeout(() => {
-    ElMessage({
-      message: 'PDF export completed successfully!',
-      type: 'success',
-      duration: 3000
-    })
-  }, 2000)
-}
+// export icon removed; export only available in detail page
 </script>
 
 <style scoped>
@@ -131,16 +106,7 @@ const exportToPDF = () => {
   font-size: 0.85rem;
 }
 
-.export-btn {
-  padding: 0.5rem;
-  color: #666;
-  transition: color 0.3s ease;
-}
 
-.export-btn:hover {
-  color: #409eff;
-  background: rgba(64, 158, 255, 0.1);
-}
 
 /* Article Content */
 .article-content {

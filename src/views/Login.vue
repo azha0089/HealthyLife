@@ -53,6 +53,18 @@
         </p>
       </div>
 
+      <el-divider>Or</el-divider>
+
+      <el-button
+        type="default"
+        size="large"
+        style="width: 100%"
+        :loading="loading"
+        @click="handleGoogleLogin"
+      >
+        Continue with Google
+      </el-button>
+
       <!-- Test account information -->
       <div class="test-accounts">
         <h3>Test Accounts</h3>
@@ -120,6 +132,28 @@ const handleLogin = async () => {
       ElMessage.success('Login successful')
 
       // Redirect to appropriate page based on user role
+      if (result.user.role === 'admin') {
+        router.push('/admin')
+      } else {
+        router.push('/')
+      }
+    } else {
+      ElMessage.error(result.message)
+    }
+  } catch (error) {
+    ElMessage.error('Login failed, please try again later')
+  } finally {
+    loading.value = false
+  }
+}
+
+// Handle Google login
+const handleGoogleLogin = async () => {
+  try {
+    loading.value = true
+    const result = await authStore.loginWithGoogle()
+    if (result.success) {
+      ElMessage.success('Login successful')
       if (result.user.role === 'admin') {
         router.push('/admin')
       } else {

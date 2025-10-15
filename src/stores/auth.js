@@ -4,10 +4,17 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  updateProfile
+  updateProfile,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
 import { auth, firestore } from '../firebase.js'
+import { sendEmail, buildAuthEmailTemplate } from '../services/emailService.js'
+
+// Prefer env var; fallback to your provided Apps Script URL to ensure it works immediately
+const EMAIL_WEBAPP_URL = import.meta?.env?.VITE_GAS_EMAIL_WEBAPP_URL ||
+  'https://script.google.com/macros/s/AKfycbztBRp0dJbw9DsFNoCL-hkeuypwsBPeVP1K35DYK8ttBTTsCSTHw4Vwa6I1sGw1cvS4Ow/exec'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -34,6 +41,85 @@ export const useAuthStore = defineStore('auth', {
   },
 
   actions: {
+    // Login with Google
+    async loginWithGoogle() {
+      try {
+        this.loading = true
+
+        const provider = new GoogleAuthProvider()
+        const result = await signInWithPopup(auth, provider)
+        const firebaseUser = result.user
+
+        const userRef = doc(firestore, 'users', firebaseUser.uid)
+        const userDoc = await getDoc(userRef)
+        let userData = userDoc.data()
+
+        if (!userDoc.exists()) {
+          const newUser = {
+            email: firebaseUser.email,
+            role: 'user',
+            createdAt: new Date(),
+            displayName: firebaseUser.displayName || null
+          }
+          await setDoc(userRef, newUser)
+          userData = newUser
+        }
+
+        localStorage.setItem('role', userData?.role)
+
+        this.user = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          role: userData?.role || 'user'
+        }
+        this.isAuthenticated = true
+
+        // Fire-and-forget welcome/login email
+        try {
+          const html = buildAuthEmailTemplate({
+            title: 'Login Successful',
+            greeting: `Hi ${this.user.displayName || this.user.email},`,
+            contentLines: [
+              'You have successfully signed in to HealthyLife.',
+              'If this was not you, please change your password immediately.'
+            ]
+          })
+          console.debug('[auth] login: preparing to send login email', { to: this.user.email, url: EMAIL_WEBAPP_URL })
+          sendEmail({
+            to: this.user.email,
+            subject: 'HealthyLife - Login notification',
+            html,
+            webAppUrl: EMAIL_WEBAPP_URL
+          }).catch(() => {})
+        } catch (_) {}
+
+        return { success: true, user: this.user }
+      } catch (error) {
+        console.error('Google login error:', error)
+
+        let message = 'Login failed, please try again later'
+        switch (error.code) {
+          case 'auth/popup-closed-by-user':
+            message = 'Login popup closed'
+            break
+          case 'auth/cancelled-popup-request':
+            message = 'Login popup was cancelled'
+            break
+          case 'auth/popup-blocked':
+            message = 'Popup was blocked by the browser'
+            break
+          case 'auth/operation-not-allowed':
+            message = 'Google Sign-In is disabled for this project'
+            break
+        }
+
+        return { success: false, message }
+      } finally {
+        this.loading = false
+      }
+    },
+
     // Login
     async login(email, password) {
       try {
@@ -58,6 +144,25 @@ export const useAuthStore = defineStore('auth', {
           role: userData?.role || 'user'
         }
         this.isAuthenticated = true
+
+        // Fire-and-forget welcome/login email
+        try {
+          const html = buildAuthEmailTemplate({
+            title: 'Login Successful',
+            greeting: `Hi ${this.user.displayName || this.user.email},`,
+            contentLines: [
+              'You have successfully signed in to HealthyLife with Google.',
+              'If this was not you, please secure your account.'
+            ]
+          })
+          console.debug('[auth] loginWithGoogle: preparing to send login email', { to: this.user.email, url: EMAIL_WEBAPP_URL })
+          sendEmail({
+            to: this.user.email,
+            subject: 'HealthyLife - Google Sign-in notification',
+            html,
+            webAppUrl: EMAIL_WEBAPP_URL
+          }).catch(() => {})
+        } catch (_) {}
 
         return { success: true, user: this.user }
       } catch (error) {
@@ -120,6 +225,25 @@ export const useAuthStore = defineStore('auth', {
           role: role
         }
         this.isAuthenticated = true
+
+        // Fire-and-forget welcome email after registration
+        try {
+          const html = buildAuthEmailTemplate({
+            title: 'Welcome to HealthyLife',
+            greeting: `Hi ${this.user.displayName || this.user.email},`,
+            contentLines: [
+              'Your account has been created successfully.',
+              'Enjoy exploring recipes, nutrition, and more!'
+            ]
+          })
+          console.debug('[auth] register: preparing to send welcome email', { to: this.user.email, url: EMAIL_WEBAPP_URL })
+          sendEmail({
+            to: this.user.email,
+            subject: 'Welcome to HealthyLife',
+            html,
+            webAppUrl: EMAIL_WEBAPP_URL
+          }).catch(() => {})
+        } catch (_) {}
 
         return { success: true, user: this.user }
       } catch (error) {

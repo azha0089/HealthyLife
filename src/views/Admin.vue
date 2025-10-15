@@ -39,6 +39,10 @@
           <el-icon><MagicStick /></el-icon>
           <span>Vitamin Articles Management</span>
         </el-menu-item>
+        <el-menu-item index="events" @click="navigateToEvents">
+          <el-icon><Calendar /></el-icon>
+          <span>Events Management</span>
+        </el-menu-item>
         
         <!-- <el-menu-item index="settings">
           <el-icon><Setting /></el-icon>
@@ -182,7 +186,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   User, Odometer, Document, Setting, Avatar, UserFilled, Refresh, Plus, Search, SwitchButton, ForkSpoon,
-  TrendCharts, MagicStick, Operation, DataBoard
+  TrendCharts, MagicStick, Operation, DataBoard, Calendar
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth.js'
 import { 
@@ -295,6 +299,9 @@ const handleMenuSelect = (index) => {
     return
   } else if (index === 'vitamin-articles') {
     navigateToVitaminManagement()
+    return
+  } else if (index === 'events') {
+    navigateToEvents()
     return
   }
   
@@ -658,6 +665,11 @@ const navigateToMacroManagement = () => {
 const navigateToVitaminManagement = () => {
   // TODO: 实现维生素文章管理页面路由
   ElMessage.info('Vitamin Articles Management page is under development')
+}
+
+// Navigate to events management page
+const navigateToEvents = () => {
+  router.push('/admin/events')
 }
 
 // Handle logout

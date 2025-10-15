@@ -12,11 +12,15 @@ import VitaminsArticleDetail from '../views/VitaminsArticleDetail.vue'
 import Login from '../views/Login.vue'
 import Register from '../views/Register.vue'
 import Admin from '../views/Admin.vue'
+import Events from '../views/Events.vue'
+import EventsApply from '../views/EventsApply.vue'
+import ProfileMyEvents from '../views/ProfileMyEvents.vue'
+import AdminEvents from '../views/AdminEvents.vue'
 import Profile from '../views/Profile.vue'
 import RecipeManagement from '../views/RecipeManagement.vue'
 import UserManagement from '../views/UserManagement.vue'
 
-const Events = { template: '<div class="page-container"><h2>Events</h2><p>Latest health activity information</p></div>' }
+// Replace placeholder Events route with real page
 
 // Import recipe components
 import Recipes from '../views/Recipes.vue'
@@ -51,9 +55,21 @@ const routes = [
     meta: { requiresAuth: true, roles: ['user', 'admin'] }
   },
   { 
+    path: '/events/apply', 
+    component: EventsApply, 
+    name: 'EventsApply',
+    meta: { requiresAuth: true, roles: ['user', 'admin'] }
+  },
+  { 
     path: '/profile', 
     component: Profile, 
     name: 'Profile',
+    meta: { requiresAuth: true, roles: ['user', 'admin'] }
+  },
+  { 
+    path: '/profile/my-events', 
+    component: ProfileMyEvents, 
+    name: 'ProfileMyEvents',
     meta: { requiresAuth: true, roles: ['user', 'admin'] }
   },
   
@@ -120,6 +136,12 @@ const routes = [
         path: 'users',
         component: UserManagement,
         name: 'AdminUsers',
+        meta: { requiresAuth: true, roles: ['admin'] }
+      },
+      {
+        path: 'events',
+        component: AdminEvents,
+        name: 'AdminEvents',
         meta: { requiresAuth: true, roles: ['admin'] }
       }
     ]
