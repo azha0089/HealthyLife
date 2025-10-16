@@ -162,6 +162,9 @@
         <el-button size="small" type="danger" @click="batchDeleteUsers">
           Batch Delete
         </el-button>
+        <el-button size="small" type="primary" @click="showBulkEmailDialog">
+          Bulk Email
+        </el-button>
       </div>
     </div>
 
@@ -243,6 +246,38 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 群发邮件对话框 -->
+    <el-dialog
+      v-model="bulkEmailDialogVisible"
+      title="Bulk Email"
+      width="600px"
+    >
+      <el-form label-width="90px">
+        <el-form-item label="Recipients">
+          <el-tag type="info">{{ selectedUsers.length }} selected</el-tag>
+        </el-form-item>
+        <el-form-item label="Subject">
+          <el-input v-model="bulkEmailForm.subject" placeholder="Enter email subject" clearable />
+        </el-form-item>
+        <el-form-item label="Message">
+          <el-input
+            v-model="bulkEmailForm.body"
+            type="textarea"
+            :rows="8"
+            placeholder="Enter email content"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="bulkEmailDialogVisible = false">Cancel</el-button>
+          <el-button type="primary" :loading="bulkEmailLoading" @click="handleSendBulkEmail">
+            Send
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -261,6 +296,7 @@ import {
   getUserStats,
   batchUpdateUserRole
 } from '../services/userService.js'
+import { sendEmail, buildAuthEmailTemplate } from '../services/emailService.js'
 
 const authStore = useAuthStore()
 const loading = ref(false)
@@ -282,6 +318,12 @@ const userStats = ref({
 
 // Selected users
 const selectedUsers = ref([])
+
+// Bulk email dialog state
+const bulkEmailDialogVisible = ref(false)
+const bulkEmailLoading = ref(false)
+const bulkEmailForm = ref({ subject: '', body: '' })
+const EMAIL_WEBAPP_URL = import.meta?.env?.VITE_GAS_EMAIL_WEBAPP_URL || 'https://script.google.com/macros/s/AKfycbztBRp0dJbw9DsFNoCL-hkeuypwsBPeVP1K35DYK8ttBTTsCSTHw4Vwa6I1sGw1cvS4Ow/exec'
 
 // Add user dialog
 const addDialogVisible = ref(false)
@@ -410,6 +452,54 @@ const handleCurrentChange = (page) => {
 // Table selection handling
 const handleSelectionChange = (selection) => {
   selectedUsers.value = selection
+}
+
+// Show bulk email dialog
+const showBulkEmailDialog = () => {
+  if (selectedUsers.value.length === 0) {
+    ElMessage.warning('Please select users to email')
+    return
+  }
+  bulkEmailForm.value = { subject: '', body: '' }
+  bulkEmailDialogVisible.value = true
+}
+
+// Send bulk email
+const handleSendBulkEmail = async () => {
+  try {
+    if (!bulkEmailForm.value.subject?.trim() || !bulkEmailForm.value.body?.trim()) {
+      ElMessage.warning('Please enter subject and message')
+      return
+    }
+    const recipients = selectedUsers.value.map(u => u.email).filter(e => /[^@\s]+@[^@\s]+\.[^@\s]+/.test(e))
+    if (recipients.length === 0) {
+      ElMessage.error('No valid recipient emails')
+      return
+    }
+    bulkEmailLoading.value = true
+    let success = 0, failed = 0
+    // Send one by one for reliability
+    for (const email of recipients) {
+      const html = buildAuthEmailTemplate({
+        title: bulkEmailForm.value.subject,
+        greeting: '',
+        contentLines: bulkEmailForm.value.body.split(/\n+/)
+      })
+      const resp = await sendEmail({
+        to: email,
+        subject: bulkEmailForm.value.subject,
+        html,
+        webAppUrl: EMAIL_WEBAPP_URL
+      })
+      if (resp?.success) success++; else failed++
+    }
+    ElMessage.success(`Emails sent: ${success}, failed: ${failed}`)
+    bulkEmailDialogVisible.value = false
+  } catch (e) {
+    ElMessage.error('Failed to send emails')
+  } finally {
+    bulkEmailLoading.value = false
+  }
 }
 
 // Switch user role

@@ -99,6 +99,21 @@
             <el-icon class="stats-icon"><UserFilled /></el-icon>
           </el-card>
         </div>
+
+        <div class="charts-grid">
+          <el-card class="chart-card">
+            <div class="chart-title">User Registrations (Last 30 days)</div>
+            <div ref="chartUsersRef" class="chart-box"></div>
+          </el-card>
+          <el-card class="chart-card">
+            <div class="chart-title">Event Type Distribution</div>
+            <div ref="chartEventTypeRef" class="chart-box"></div>
+          </el-card>
+          <el-card class="chart-card">
+            <div class="chart-title">Top Events by Bookings</div>
+            <div ref="chartTopEventsRef" class="chart-box"></div>
+          </el-card>
+        </div>
       </div>
 
       <!-- 用户管理 -->
@@ -181,7 +196,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
@@ -308,6 +323,13 @@ const handleMenuSelect = (index) => {
   // Load data if needed
   if (index === 'users' && users.value.length === 0) {
     fetchUsers()
+  }
+  if (index === 'dashboard') {
+    // refresh charts data whenever returning to dashboard
+    loadEventsForCharts().then(refreshCharts)
+    if (router.currentRoute.value.path !== '/admin') {
+      router.push('/admin')
+    }
   }
 }
 
@@ -700,7 +722,138 @@ const handleLogout = async () => {
 onMounted(() => {
   // Default to dashboard, get user data for statistics
   fetchUsers()
+  initCharts()
+  loadEventsForCharts().then(refreshCharts)
 })
+
+onBeforeUnmount(() => {
+  disposeCharts()
+})
+
+// --- Charts (ECharts via CDN) ---
+const chartUsersRef = ref(null)
+const chartEventTypeRef = ref(null)
+const chartTopEventsRef = ref(null)
+let chartUsers, chartEventType, chartTopEvents
+
+async function ensureEcharts() {
+  if (window.echarts) return window.echarts
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = 'https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js'
+    s.onload = resolve
+    s.onerror = reject
+    document.head.appendChild(s)
+  })
+  return window.echarts
+}
+
+async function initCharts() {
+  try {
+    const echarts = await ensureEcharts()
+    await nextTick()
+    if (chartUsersRef.value && !chartUsers) chartUsers = echarts.init(chartUsersRef.value)
+    if (chartEventTypeRef.value && !chartEventType) chartEventType = echarts.init(chartEventTypeRef.value)
+    if (chartTopEventsRef.value && !chartTopEvents) chartTopEvents = echarts.init(chartTopEventsRef.value)
+    await refreshCharts()
+    window.addEventListener('resize', handleResize)
+  } catch (_) {}
+}
+
+function disposeCharts() {
+  try { chartUsers?.dispose() } catch (_) {}
+  try { chartEventType?.dispose() } catch (_) {}
+  try { chartTopEvents?.dispose() } catch (_) {}
+  chartUsers = chartEventType = chartTopEvents = null
+  window.removeEventListener('resize', handleResize)
+}
+
+function handleResize() {
+  try { chartUsers?.resize() } catch (_) {}
+  try { chartEventType?.resize() } catch (_) {}
+  try { chartTopEvents?.resize() } catch (_) {}
+}
+
+async function refreshCharts() {
+  // Build data from current state (users + events)
+  const registrations = buildUserRegistrationsSeries(users.value)
+  const typeDist = buildEventTypeDistribution()
+  const topEvents = buildTopEventsByBookings()
+
+  chartUsers?.setOption({
+    grid: { left: 40, right: 20, top: 30, bottom: 30 },
+    xAxis: { type: 'category', data: registrations.labels },
+    yAxis: { type: 'value' },
+    series: [{ type: 'line', smooth: true, data: registrations.values, areaStyle: {} }],
+    tooltip: { trigger: 'axis' }
+  })
+
+  chartEventType?.setOption({
+    tooltip: { trigger: 'item' },
+    series: [{
+      type: 'pie', radius: '65%',
+      data: typeDist.map(([name, value]) => ({ name, value })),
+      emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.3)' } }
+    }]
+  })
+
+  chartTopEvents?.setOption({
+    grid: { left: 120, right: 20, top: 20, bottom: 20 },
+    xAxis: { type: 'value' },
+    yAxis: { type: 'category', data: topEvents.map(e => e.name) },
+    series: [{ type: 'bar', data: topEvents.map(e => e.count) }],
+    tooltip: { trigger: 'axis' }
+  })
+}
+
+function formatDateYMD(d) {
+  const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const day = String(d.getDate()).padStart(2,'0')
+  return `${y}-${m}-${day}`
+}
+
+function buildUserRegistrationsSeries(allUsers) {
+  const today = new Date()
+  const dates = []
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i)
+    dates.push(formatDateYMD(d))
+  }
+  const counts = Object.fromEntries(dates.map(d => [d, 0]))
+  for (const u of allUsers || []) {
+    const created = u.createdAt?.toDate ? u.createdAt.toDate() : (u.createdAt ? new Date(u.createdAt) : null)
+    if (!created || isNaN(created)) continue
+    const key = formatDateYMD(created)
+    if (counts[key] !== undefined) counts[key]++
+  }
+  return { labels: dates, values: dates.map(d => counts[d] || 0) }
+}
+
+function buildEventTypeDistribution() {
+  const groups = {}
+  for (const e of users.value?.length >= 0 ? eventsForCharts.value : []) {
+    const key = e.type || 'Unknown'
+    groups[key] = (groups[key] || 0) + 1
+  }
+  return Object.entries(groups)
+}
+
+// Prepare events data from AdminEvents route state when loaded, fallback to service if needed
+import { listApprovedEvents } from '../services/eventsService'
+const eventsForCharts = ref([])
+
+async function loadEventsForCharts() {
+  try {
+    eventsForCharts.value = await listApprovedEvents()
+  } catch (_) {
+    eventsForCharts.value = []
+  }
+}
+
+function buildTopEventsByBookings() {
+  const rows = (eventsForCharts.value || []).map(e => ({ name: e.name || e.title || e.id, count: e.bookingsCount || 0 }))
+  rows.sort((a,b) => b.count - a.count)
+  return rows.slice(0, 10)
+}
 </script>
 
 <style scoped>
@@ -848,6 +1001,17 @@ onMounted(() => {
   color: #409eff;
   opacity: 0.3;
 }
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+  padding: 0 24px 24px 24px;
+}
+
+.chart-card .el-card__body { padding: 12px; }
+.chart-title { font-size: 14px; color: #666; margin: 4px 8px 8px; }
+.chart-box { width: 100%; height: 280px; }
 
 /* 表格样式 */
 .el-table {
