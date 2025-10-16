@@ -188,6 +188,7 @@
 import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useAuthStore } from '../stores/auth.js'
 import { 
   ArrowRight, 
   Clock, 
@@ -204,11 +205,11 @@ import {
   getRelatedVitaminArticles 
 } from '../services/vitaminService.js'
 import { sendEmail, buildAuthEmailTemplate } from '../services/emailService.js'
-import { storage } from '../firebase.js'
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
+const EMAIL_WEBAPP_URL = import.meta?.env?.VITE_GAS_EMAIL_WEBAPP_URL || 'https://script.google.com/macros/s/AKfycbztBRp0dJbw9DsFNoCL-hkeuypwsBPeVP1K35DYK8ttBTTsCSTHw4Vwa6I1sGw1cvS4Ow/exec'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 
 // Reactive data
 const article = ref(null)
@@ -412,7 +413,7 @@ onBeforeUnmount(() => stopReading())
 // Export handlers
 function handleExportCommand(cmd) {
   if (cmd === 'download') return exportToDevicePDF('a4')
-  if (cmd === 'email') return exportToEmailPDF('a4')
+  if (cmd === 'email') return emailCurrentPageLink()
 }
 
 async function ensureJsLib(src, globalKey) {
@@ -470,25 +471,25 @@ async function exportToDevicePDF(mode = 'a4') {
   }
 }
 
-async function exportToEmailPDF(mode = 'a4') {
+async function emailCurrentPageLink() {
   try {
-    const pdf = await generatePdfFromElement('.article-content', { mode })
-    const arrayBuf = pdf.output('arraybuffer')
-    const bytes = new Uint8Array(arrayBuf)
-    const safeName = (article.value?.title || 'vitamin').replace(/[^a-z0-9\-_]+/gi,'_') + '_' + Date.now() + '.pdf'
-    const fileRef = storageRef(storage, `exports/${safeName}`)
-    await uploadBytes(fileRef, bytes, { contentType: 'application/pdf' })
-    const downloadURL = await getDownloadURL(fileRef)
+    const pageUrl = window.location.href
     const html = buildAuthEmailTemplate({
-      title: 'Vitamin Article Export',
-      greeting: 'Your requested export link is below.',
-      contentLines: [article.value?.title || '', `Download: ${downloadURL}`]
+      title: 'Vitamin Article Link',
+      greeting: 'Here is the link to your requested vitamin article:',
+      contentLines: [article.value?.title || '', `Link: ${pageUrl}`]
     })
-    const to = prompt('Enter email address to send to:')
+    let recipient = authStore?.user?.email || ''
+    if (!recipient) recipient = prompt('Enter email address to send to:') || ''
+    if (!recipient || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipient)) {
+      ElMessage.error('Please provide a valid recipient email')
+      return
+    }
     await sendEmail({
-      to,
-      subject: `Export - ${(article.value?.title || 'Vitamin Article')}`,
-      html
+      to: recipient,
+      subject: `Vitamin Article - ${(article.value?.title || 'Article')}`,
+      html,
+      webAppUrl: EMAIL_WEBAPP_URL
     })
     ElMessage.success('Export email sent (best-effort)')
   } catch (e) {

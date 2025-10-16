@@ -120,8 +120,6 @@ import { useMacroArticles } from '../composables/useMacroArticles.js'
 import { useAuthStore } from '../stores/auth.js'
 import { ElMessage } from 'element-plus'
 import { sendEmail, buildAuthEmailTemplate } from '../services/emailService.js'
-import { storage } from '../firebase.js'
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 const EMAIL_WEBAPP_URL = import.meta?.env?.VITE_GAS_EMAIL_WEBAPP_URL || 'https://script.google.com/macros/s/AKfycbztBRp0dJbw9DsFNoCL-hkeuypwsBPeVP1K35DYK8ttBTTsCSTHw4Vwa6I1sGw1cvS4Ow/exec'
 
 const route = useRoute()
@@ -202,7 +200,7 @@ const getBreadcrumbText = () => {
 // Export handlers (PDF to device or Email)
 function handleExportCommand(cmd) {
   if (cmd === 'download') return exportToDevicePDF('a4')
-  if (cmd === 'email') return exportToEmailPDF('a4')
+  if (cmd === 'email') return emailCurrentPageLink()
 }
 
 const goBack = () => {
@@ -323,20 +321,13 @@ async function exportToDevicePDF(mode = 'a4') {
   }
 }
 
-async function exportToEmailPDF(mode = 'a4') {
+async function emailCurrentPageLink() {
   try {
-    const pdf = await generatePdfFromElement('.article-content', { mode })
-    const arrayBuf = pdf.output('arraybuffer')
-    const bytes = new Uint8Array(arrayBuf)
-    // 1) Upload to Firebase Storage to avoid large email attachments
-    const safeName = (article.value?.title || 'article').replace(/[^a-z0-9\-_]+/gi,'_') + '_' + Date.now() + '.pdf'
-    const fileRef = storageRef(storage, `exports/${safeName}`)
-    await uploadBytes(fileRef, bytes, { contentType: 'application/pdf' })
-    const downloadURL = await getDownloadURL(fileRef)
+    const pageUrl = window.location.href
     const html = buildAuthEmailTemplate({
-      title: 'Article Export',
-      greeting: 'Your requested export link is below.',
-      contentLines: [article.value?.title || '', `Download: ${downloadURL}`]
+      title: 'Article Link',
+      greeting: 'Here is the link to your requested article:',
+      contentLines: [article.value?.title || '', `Link: ${pageUrl}`]
     })
     let recipient = authStore?.user?.email || ''
     if (!recipient) recipient = prompt('Enter email address to send to:') || ''
@@ -346,9 +337,8 @@ async function exportToEmailPDF(mode = 'a4') {
     }
     const resp = await sendEmail({
       to: recipient,
-      subject: `Export - ${(article.value?.title || 'Article')}`,
+      subject: `Article - ${(article.value?.title || 'Article')}`,
       html,
-      // no attachment; send link only
       webAppUrl: EMAIL_WEBAPP_URL
     })
     if (!resp?.success) throw new Error(resp?.message || 'Email not configured')
