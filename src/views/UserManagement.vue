@@ -287,7 +287,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   User, Avatar, UserFilled, Refresh, Plus, Search
 } from '@element-plus/icons-vue'
-import { useAuthStore } from '../stores/auth.js'
+import { useAuthStore, SUPER_ADMIN_EMAIL } from '../stores/auth.js'
 import {
   getAllUsers,
   createUser,
@@ -299,6 +299,7 @@ import {
 import { sendEmail, buildAuthEmailTemplate } from '../services/emailService.js'
 
 const authStore = useAuthStore()
+const isSuperAdmin = computed(() => authStore.currentUser?.email?.toLowerCase() === SUPER_ADMIN_EMAIL)
 const loading = ref(false)
 const users = ref([])
 const currentPage = ref(1)
@@ -366,6 +367,9 @@ const editFormRules = {
 // Computed properties
 const filteredUsers = computed(() => {
   let result = users.value
+
+  // Always hide administrators in this view
+  result = result.filter(user => user.role !== 'admin')
 
   // Apply search filter
   if (searchQuery.value) {

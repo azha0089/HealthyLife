@@ -219,10 +219,10 @@ export const getUserByEmail = async (email) => {
  */
 export const getUsersByRole = async (role) => {
   try {
+    // Avoid composite index requirement: simple role filter
     const q = query(
       collection(firestore, USERS_COLLECTION),
-      where('role', '==', role),
-      orderBy('createdAt', 'desc')
+      where('role', '==', role)
     )
     const querySnapshot = await getDocs(q)
     

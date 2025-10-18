@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '../stores/auth.js'
+import { useAuthStore, SUPER_ADMIN_EMAIL } from '../stores/auth.js'
 import { ElMessage } from 'element-plus'
 
 // Import page components
@@ -139,6 +139,12 @@ const routes = [
         meta: { requiresAuth: true, roles: ['admin'] }
       },
       {
+        path: 'admins',
+        component: () => import('../views/AdminManagement.vue'),
+        name: 'AdminAdmins',
+        meta: { requiresAuth: true, roles: ['admin'] }
+      },
+      {
         path: 'events',
         component: AdminEvents,
         name: 'AdminEvents',
@@ -200,6 +206,16 @@ router.beforeEach(async (to, from, next) => {
       next('/')
     }
     return
+  }
+
+  // Enforce super admin only access to Admin Admins page
+  if (to.name === 'AdminAdmins') {
+    const email = authStore.currentUser?.email?.toLowerCase()
+    if (email !== SUPER_ADMIN_EMAIL) {
+      ElMessage.error('Only super admin can manage administrators')
+      next('/admin')
+      return
+    }
   }
   
   next()

@@ -21,6 +21,10 @@
           <el-icon><User /></el-icon>
           <span>User Management</span>
         </el-menu-item>
+        <el-menu-item index="admins" @click="navigateToAdminManagement">
+          <el-icon><Avatar /></el-icon>
+          <span>Admin Management</span>
+        </el-menu-item>
         
         <!-- <el-menu-item index="content">
           <el-icon><Document /></el-icon>
@@ -308,6 +312,9 @@ const handleMenuSelect = (index) => {
     return
   } else if (index === 'users') {
     navigateToUserManagement()
+    return
+  } else if (index === 'admins') {
+    navigateToAdminManagement()
     return
   } else if (index === 'macro-articles') {
     navigateToMacroManagement()
@@ -675,6 +682,11 @@ const navigateToRecipeManagement = () => {
 // Navigate to user management page
 const navigateToUserManagement = () => {
   router.push('/admin/users')
+}
+
+// Navigate to super-admin admin management page
+const navigateToAdminManagement = () => {
+  router.push('/admin/admins')
 }
 
 // Navigate to macro articles management page
