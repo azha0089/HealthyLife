@@ -12,6 +12,9 @@ import { doc, setDoc, getDoc } from 'firebase/firestore'
 import { auth, firestore } from '../firebase.js'
 import { sendEmail, buildAuthEmailTemplate } from '../services/emailService.js'
 
+// Unique super admin email
+export const SUPER_ADMIN_EMAIL = 'admin@admin.com'
+
 // Prefer env var; fallback to your provided Apps Script URL to ensure it works immediately
 const EMAIL_WEBAPP_URL = import.meta?.env?.VITE_GAS_EMAIL_WEBAPP_URL ||
   'https://script.google.com/macros/s/AKfycbztBRp0dJbw9DsFNoCL-hkeuypwsBPeVP1K35DYK8ttBTTsCSTHw4Vwa6I1sGw1cvS4Ow/exec'
@@ -29,6 +32,11 @@ export const useAuthStore = defineStore('auth', {
     userRole: (state) => {
       // Get from state first, then from localStorage
       return state.user?.role || localStorage.getItem('role') || null
+    },
+    // Super admin is identified strictly by email
+    isSuperAdmin: (state) => {
+      const email = state.user?.email || null
+      return email && email.toLowerCase() === SUPER_ADMIN_EMAIL
     },
     isAdmin: (state) => {
       const role = state.user?.role || localStorage.getItem('role')

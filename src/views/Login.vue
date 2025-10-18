@@ -32,6 +32,9 @@
             clearable
           />
         </el-form-item>
+      <div style="text-align: right; margin-top: -8px; margin-bottom: 12px;">
+        <el-link type="primary" @click="handleForgotPassword">Forgot password?</el-link>
+      </div>
 
         <el-form-item>
           <el-button
@@ -66,15 +69,6 @@
       </el-button>
 
       <!-- Test account information -->
-      <div class="test-accounts">
-        <h3>Test Accounts</h3>
-        <div class="account-item">
-          <strong>Admin:</strong> admin@google.com / 123456
-        </div>
-        <div class="account-item">
-          <strong>User:</strong> user@google.com / 123456
-        </div>
-      </div>
     </div>
   </div>
 </template>
@@ -84,6 +78,8 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth.js'
+import { sendPasswordResetEmail } from 'firebase/auth'
+import { auth } from '../firebase.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -166,6 +162,28 @@ const handleGoogleLogin = async () => {
     ElMessage.error('Login failed, please try again later')
   } finally {
     loading.value = false
+  }
+}
+
+// Forgot password: send reset email via Firebase Auth
+const handleForgotPassword = async () => {
+  try {
+    const email = loginForm.email?.trim()
+    if (!email) {
+      ElMessage.warning('Please enter your email first')
+      return
+    }
+    await sendPasswordResetEmail(auth, email)
+    ElMessage.success('Password reset email sent. Please check your inbox.')
+  } catch (e) {
+    let msg = 'Failed to send reset email'
+    switch (e?.code) {
+      case 'auth/invalid-email': msg = 'Invalid email format'; break
+      case 'auth/user-not-found': msg = 'No user found with this email'; break
+      case 'auth/missing-email': msg = 'Please enter your email first'; break
+      case 'auth/operation-not-allowed': msg = 'Email/Password sign-in is disabled in Firebase'; break
+    }
+    ElMessage.error(msg)
   }
 }
 
