@@ -21,7 +21,7 @@
     </div>
 
     <el-alert
-      title="Only super admin (admin@admin.com) can access this page"
+      title="Only super admin (arkingz2001@gmail.com) can access this page"
       type="warning"
       show-icon
       class="mb16"
