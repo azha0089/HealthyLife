@@ -5,7 +5,7 @@
       <div class="sidebar-header">
         <h2>Admin Panel</h2>
       </div>
-      
+
       <el-menu
         :default-active="activeMenu"
         class="sidebar-menu"
@@ -16,7 +16,7 @@
           <el-icon><Odometer /></el-icon>
           <span>Dashboard</span>
         </el-menu-item>
-        
+
         <el-menu-item index="users" @click="navigateToUserManagement">
           <el-icon><User /></el-icon>
           <span>User Management</span>
@@ -25,12 +25,12 @@
           <el-icon><Avatar /></el-icon>
           <span>Admin Management</span>
         </el-menu-item>
-        
+
         <!-- <el-menu-item index="content">
           <el-icon><Document /></el-icon>
           <span>Content Management</span>
         </el-menu-item> -->
-        
+
         <el-menu-item index="recipes" @click="navigateToRecipeManagement">
           <el-icon><ForkSpoon /></el-icon>
           <span>Recipe Management</span>
@@ -47,18 +47,24 @@
           <el-icon><Calendar /></el-icon>
           <span>Events Management</span>
         </el-menu-item>
-        
+
         <!-- <el-menu-item index="settings">
           <el-icon><Setting /></el-icon>
           <span>System Settings</span>
         </el-menu-item> -->
       </el-menu>
-      
+
       <!-- 退出登录按钮 -->
       <div class="sidebar-footer">
-        <el-button 
-          type="danger" 
-          style="width: 100%;" 
+        <el-button
+            style="width: 100%;margin-bottom: 10px"
+            @click="goHome"
+        >
+          Home
+        </el-button>
+        <el-button
+          type="danger"
+          style="width: 100%;margin-left: 0"
           @click="handleLogout"
         >
           <el-icon><SwitchButton /></el-icon>
@@ -71,13 +77,13 @@
     <div class="admin-content">
       <!-- 路由视图，用于显示子路由内容 -->
       <router-view v-if="$route.path !== '/admin'" />
-      
+
       <!-- 仪表盘 -->
       <div v-if="$route.path === '/admin' && activeMenu === 'dashboard'" class="content-section">
         <div class="content-header">
           <h3>System Overview</h3>
         </div>
-        
+
         <div class="dashboard-cards">
           <el-card class="stats-card">
             <div class="stats-content">
@@ -86,7 +92,7 @@
             </div>
             <el-icon class="stats-icon"><User /></el-icon>
           </el-card>
-          
+
           <el-card class="stats-card">
             <div class="stats-content">
               <div class="stats-number">{{ adminUsers }}</div>
@@ -94,7 +100,7 @@
             </div>
             <el-icon class="stats-icon"><Avatar /></el-icon>
           </el-card>
-          
+
           <el-card class="stats-card">
             <div class="stats-content">
               <div class="stats-number">{{ regularUsers }}</div>
@@ -131,7 +137,7 @@
             </el-button>
           </div>
         </div>
-        
+
         <div style="padding: 24px; text-align: center;">
           <el-card style="max-width: 600px; margin: 0 auto;">
             <div style="text-align: center;">
@@ -170,7 +176,7 @@
             </el-button>
           </div>
         </div>
-        
+
         <div style="padding: 24px; text-align: center;">
           <el-card style="max-width: 600px; margin: 0 auto;">
             <div style="text-align: center;">
@@ -187,7 +193,7 @@
           </el-card>
         </div>
       </div>
-        
+
         <!-- 系统设置 -->
       <div v-if="$route.path === '/admin' && activeMenu === 'settings'" class="content-section">
         <div class="content-header">
@@ -203,15 +209,15 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { 
+import {
   User, Odometer, Document, Setting, Avatar, UserFilled, Refresh, Plus, Search, SwitchButton, ForkSpoon,
   TrendCharts, MagicStick, Operation, DataBoard, Calendar
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth.js'
-import { 
-  getAllUsers, 
-  createUser, 
-  updateUser, 
+import {
+  getAllUsers,
+  createUser,
+  updateUser,
   deleteUser as deleteUserService,
   getUserStats,
   batchUpdateUserRole
@@ -288,7 +294,7 @@ const filteredUsers = computed(() => {
   // Search filter
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
-    result = result.filter(user => 
+    result = result.filter(user =>
       user.email.toLowerCase().includes(query) ||
       (user.displayName && user.displayName.toLowerCase().includes(query))
     )
@@ -305,7 +311,7 @@ const regularUsers = computed(() => users.value.filter(user => user.role === 'us
 // Handle menu selection
 const handleMenuSelect = (index) => {
   activeMenu.value = index
-  
+
   // Navigate to corresponding pages for certain menu items
   if (index === 'recipes') {
     navigateToRecipeManagement()
@@ -326,7 +332,7 @@ const handleMenuSelect = (index) => {
     navigateToEvents()
     return
   }
-  
+
   // Load data if needed
   if (index === 'users' && users.value.length === 0) {
     fetchUsers()
@@ -345,10 +351,10 @@ const fetchUsers = async () => {
   try {
     loading.value = true
     users.value = await getAllUsers()
-    
+
     // Update statistics
     await updateUserStats()
-    
+
     console.log('Fetched user list:', users.value)
   } catch (error) {
     console.error('Failed to get users:', error)
@@ -392,7 +398,7 @@ const changeUserRole = async (user) => {
   try {
     const newRole = user.role === 'admin' ? 'user' : 'admin'
     const action = newRole === 'admin' ? 'set as administrator' : 'set as regular user'
-    
+
     await ElMessageBox.confirm(
       `Are you sure you want to ${action} user ${user.email}?`,
       'Confirm Operation',
@@ -404,16 +410,16 @@ const changeUserRole = async (user) => {
     )
 
     await updateUser(user.uid, { role: newRole })
-    
+
     // Update local data
     const userIndex = users.value.findIndex(u => u.uid === user.uid)
     if (userIndex !== -1) {
       users.value[userIndex].role = newRole
     }
-    
+
     // Update statistics
     await updateUserStats()
-    
+
     ElMessage.success(`User role updated to ${newRole === 'admin' ? 'Administrator' : 'Regular User'}`)
   } catch (error) {
     if (error !== 'cancel') {
@@ -437,13 +443,13 @@ const confirmDeleteUser = async (user) => {
     )
 
     await deleteUserService(user.uid)
-    
+
     // Remove from local data
     users.value = users.value.filter(u => u.uid !== user.uid)
-    
+
     // Update statistics
     await updateUserStats()
-    
+
     ElMessage.success('User deleted successfully')
   } catch (error) {
     if (error !== 'cancel') {
@@ -476,15 +482,15 @@ const handleAddUser = async () => {
     if (!valid) return
 
     addLoading.value = true
-    
+
     // 创建用户
     await createUser(addForm.value)
-    
+
     ElMessage.success('User created successfully')
-    
+
     // 关闭对话框
     addDialogVisible.value = false
-    
+
     // 刷新用户列表
     await fetchUsers()
   } catch (error) {
@@ -528,25 +534,25 @@ const handleEditUser = async () => {
     if (!valid) return
 
     editLoading.value = true
-    
+
     // Update user
     await updateUser(editForm.value.uid, {
       displayName: editForm.value.displayName || null,
       role: editForm.value.role
     })
-    
+
     // Update local data
     const userIndex = users.value.findIndex(u => u.uid === editForm.value.uid)
     if (userIndex !== -1) {
       users.value[userIndex].displayName = editForm.value.displayName || null
       users.value[userIndex].role = editForm.value.role
     }
-    
+
     // Update statistics
     await updateUserStats()
-    
+
     ElMessage.success('User information updated successfully')
-    
+
     // 关闭对话框
     editDialogVisible.value = false
   } catch (error) {
@@ -578,7 +584,7 @@ const batchSetRole = async (role) => {
 
     const userIds = selectedUsers.value.map(user => user.uid)
     const roleText = role === 'admin' ? 'administrators' : 'regular users'
-    
+
     await ElMessageBox.confirm(
       `Are you sure you want to set the selected ${selectedUsers.value.length} users as ${roleText}?`,
       'Batch Operation Confirmation',
@@ -590,7 +596,7 @@ const batchSetRole = async (role) => {
     )
 
     await batchUpdateUserRole(userIds, role)
-    
+
     // Update local data
     selectedUsers.value.forEach(selectedUser => {
       const userIndex = users.value.findIndex(u => u.uid === selectedUser.uid)
@@ -598,13 +604,13 @@ const batchSetRole = async (role) => {
         users.value[userIndex].role = role
       }
     })
-    
+
     // Update statistics
     await updateUserStats()
-    
+
     // Clear selection
     selectedUsers.value = []
-    
+
     ElMessage.success(`Successfully set ${userIds.length} users as ${roleText}`)
   } catch (error) {
     if (error !== 'cancel') {
@@ -625,12 +631,12 @@ const batchDeleteUsers = async () => {
     // Check if current user is included
     const currentUserId = authStore.currentUser?.uid
     const hasCurrentUser = selectedUsers.value.some(user => user.uid === currentUserId)
-    
+
     if (hasCurrentUser) {
       ElMessage.error('Cannot delete current logged-in user')
       return
     }
-    
+
     await ElMessageBox.confirm(
       `Are you sure you want to delete the selected ${selectedUsers.value.length} users? This operation cannot be undone!`,
       'Dangerous Operation',
@@ -644,17 +650,17 @@ const batchDeleteUsers = async () => {
     // Delete users one by one
     const deletePromises = selectedUsers.value.map(user => deleteUserService(user.uid))
     await Promise.all(deletePromises)
-    
+
     // Remove from local data
     const deletedUserIds = selectedUsers.value.map(user => user.uid)
     users.value = users.value.filter(user => !deletedUserIds.includes(user.uid))
-    
+
     // Update statistics
     await updateUserStats()
-    
+
     // Clear selection
     selectedUsers.value = []
-    
+
     ElMessage.success(`Successfully deleted ${deletedUserIds.length} users`)
   } catch (error) {
     if (error !== 'cancel') {
@@ -728,6 +734,10 @@ const handleLogout = async () => {
       ElMessage.error('Logout failed')
     }
   }
+}
+
+const goHome = () => {
+  router.push('/')
 }
 
 // Get data when component is mounted
@@ -1102,52 +1112,52 @@ function buildTopEventsByBookings() {
     flex-direction: column;
     height: 100vh; /* 移动端也保持全屏高度 */
   }
-  
+
   .admin-sidebar {
     width: 100%;
     height: auto;
     max-height: 180px; /* 增加高度以容纳退出按钮 */
     flex-direction: row; /* 移动端改为水平布局 */
   }
-  
+
   .sidebar-menu {
     display: flex;
     overflow-x: auto;
     flex: 1;
   }
-  
+
   .sidebar-footer {
     padding: 10px;
     min-width: 80px;
     border-top: none;
     border-left: 1px solid #e6e6e6;
   }
-  
+
   .sidebar-footer .el-button {
     height: 40px;
     width: 100%;
   }
-  
+
   .sidebar-menu .el-menu-item {
     white-space: nowrap;
     flex-shrink: 0;
     margin: 4px;
   }
-  
+
   .admin-content {
     flex: 1;
     overflow-y: auto;
     padding: 10px; /* 移动端减少内边距 */
   }
-  
+
   .content-section {
     min-height: calc(100vh - 200px); /* 适应移动端布局（考虑增加的侧边栏高度）*/
   }
-  
+
   .dashboard-cards {
     grid-template-columns: 1fr;
   }
-  
+
   .el-table {
     margin: 12px;
   }

@@ -23,10 +23,11 @@
         <el-button @click="goBack" icon="ArrowLeft" type="text">Back to last  page</el-button>
         <div>
           <el-button :type="isSpeaking ? 'warning' : 'success'" @click="toggleReadAloud" aria-label="Read Aloud">{{ isSpeaking ? 'Stop' : 'Read Aloud' }}</el-button>
-          <el-dropdown @command="handleExportCommand">
-            <span class="el-dropdown-link">
-              <el-icon><Download /></el-icon>
-            </span>
+          <el-dropdown @command="handleExportCommand" style="margin-left:6px;">
+            <el-button type="primary" plain >
+              <el-icon style="margin-right:6px;"><Download /></el-icon>
+              Export
+            </el-button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="email">Send to Email</el-dropdown-item>
@@ -285,7 +286,7 @@ import RecipeCard from '../components/RecipeCard.vue'
 import {
   ArrowLeft, Clock, Lightning, User, Star, StarFilled,
   Check, Plus, InfoFilled, ShoppingCart, DataLine, Food,
-  List
+  List, Download, ArrowRight
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { sendEmail, buildAuthEmailTemplate } from '../services/emailService.js'
@@ -380,10 +381,10 @@ const loadFavoriteStatus = async () => {
       id: recipe.value.id,
       userId: authStore.user.uid
     })
-    
+
     const isFav = await isFavorited(recipeId, authStore.user.uid)
     favoriteStatus.value = isFav
-    
+
     console.log('loadFavoriteStatus: Favorite status loaded:', isFav)
   } catch (error) {
     console.error('Error loading favorite status:', error)
@@ -416,7 +417,7 @@ const toggleFavorite = async () => {
     const result = await toggleFavoriteService(recipeId, authStore.user.uid)
 
     favoriteStatus.value = result.isFavorited
-    
+
     console.log('toggleFavorite: Toggle result:', result)
 
     if (result.action === 'added') {
@@ -444,13 +445,13 @@ const loadUserRating = async () => {
       recipeId,
       userId: authStore.user.uid
     })
-    
+
     const rating = await getUserRating(recipeId, authStore.user.uid)
     if (rating !== null) {
       userRating.value = rating
     }
     userRatingLoaded.value = true
-    
+
     console.log('loadUserRating: User rating loaded:', rating)
   } catch (error) {
     console.error('Error loading user rating:', error)
